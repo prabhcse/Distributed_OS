@@ -1,0 +1,25 @@
+package all;
+
+import java.util.TreeMap;
+
+public class SocketThread implements Runnable{
+
+	private String attributes;
+	private int label;
+	private SCTPServer serverObj;
+	private TreeMap<Integer,String> nodeValue;
+	private int index;
+	
+	public SocketThread(String attributes, int label, TreeMap<Integer, String> nodeValue, int index){
+		this.attributes = attributes;
+		this.label = label;
+		this.nodeValue = nodeValue;
+		this.index = index;
+	}
+
+	public void run() {
+		serverObj = new SCTPServer();
+		serverObj.live(attributes, label, nodeValue, index);
+	}
+
+}
