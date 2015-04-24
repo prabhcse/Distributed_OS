@@ -1,0 +1,136 @@
+package all;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.AsynchronousCloseException;
+import java.nio.channels.ClosedByInterruptException;
+import java.nio.channels.UnresolvedAddressException;
+import java.util.TreeMap;
+
+import com.sun.nio.sctp.MessageInfo;
+import com.sun.nio.sctp.SctpChannel;
+
+public class SCTPClient {
+
+	public static final int MESSAGE_SIZE = 200;
+	// To give the domain name for the machines
+	public static final String domain = ".utdallas.edu";
+	
+	// Synchronized
+	
+	// This method passes the token(labelSum) with path piggybacked
+	public void live(String next, String path, TreeMap<Integer,String> nodeValue){
+		// need to compare my local port with all ports in nodeValue
+		SctpChannel sctpChannel = null;
+		
+		try{
+		String message = path;
+		//System.out.println("Message from Client:"+message+"."+" , Size="+message.getBytes().length);
+		String[] tempArray = next.split("-");
+		String hostname = tempArray[0];
+		hostname = hostname.concat(domain);
+		int port = Integer.parseInt(tempArray[1]);
+		
+		//Buffer to hold messages in byte format
+		ByteBuffer byteBuffer = ByteBuffer.allocate(MESSAGE_SIZE);
+		//Create a socket address for server at hostname at port
+		SocketAddress socketAddress = new InetSocketAddress(hostname,port);
+		//Open a channel. NOT SERVER CHANNEL
+		// The new channel is unbound and unconnected.
+		sctpChannel = SctpChannel.open();
+		//Set<SctpSocketOption<?>> options = sctpChannel.supportedOptions();
+		
+		// Initiates the blocking mode, so that channel blocks itself till connection with remote server is made.
+// -->> //sctpChannel.configureBlocking(true);
+		// Newly created channel is always in blocking mode
+		
+		/*System.out.println("The SCTP options from SCTPClient");
+		for( SctpSocketOption<?> it : options){
+			System.out.println(it.name());
+		}*/
+		
+		// Bind the channel's socket to a local port. Again this is not a server bind
+		// Using destination's port as my local port, avoids duplicates.
+		
+		// The bind method takes a SocketAddress as its argument which typically contains a port number as well as an address.
+		// Establish a relationship between the socket and the local addresses.
+		// Once a relationship is established then the socket remains bound until the channel is closed.
+		// Can use unbindAddress, but there will always be atleast one local address bound to channel's socket once invocation is successful
+		sctpChannel.bind(new InetSocketAddress(0));
+		// SCTP port number remains the same for the lifetime of the channel.
+		
+		// To be done for port duplication
+		/*int localport = sctpChannel.getRemoteAddresses().;
+		// Gets the list of all ports 
+		for(int i = 1; i < nodeValue.size(); i++){
+			if(localport == Integer.parseInt(nodeValue.get(i).split("-")[1])){
+				localport++;
+				i = 1;
+			}
+		}*/
+		// To be done
+		
+		//Connect the channel's socket to the remote server, this throws exception of Connection Refused
+		sctpChannel.connect(socketAddress);
+		//Before sending messages add additional information about the message
+		MessageInfo messageInfo = MessageInfo.createOutgoing(null,0);
+		
+		//System.out.println("Buffer Remaining: "+byteBuffer.remaining());
+		//System.out.println("Message Size: "+message.getBytes().length);
+		//convert the string message into bytes and put it in the byte buffer, giving BufferOverFlowException
+		//byteBuffer.put(message.getBytes());
+		byteBuffer.put(message.getBytes(),0,message.getBytes().length);
+		
+		// Can try different put methods.
+		
+		//Reset a pointer to point to the start of buffer 
+		byteBuffer.flip();
+		//Send a message in the channel (byte format)
+		sctpChannel.send(byteBuffer,messageInfo);
+		}
+		catch(UnsupportedOperationException e){
+			System.out.println("UnsupportedOperationException in Client : "+e.getMessage());
+			e.printStackTrace();
+		}
+		catch(UnresolvedAddressException e){
+			System.out.println("UnresolvedAddessException in Client : "+e.getMessage());
+			e.printStackTrace();
+		}
+		catch(ClosedByInterruptException e){
+			System.out.println("ClosedByInterruptException in Client : "+e.getMessage());
+			e.printStackTrace();
+		}
+		catch(AsynchronousCloseException e){
+			System.out.println("AsyncCloseException in Client : "+e.getMessage());
+			e.printStackTrace();
+		}
+		catch(IOException e){
+			System.out.println("IOException in Client : "+e.getMessage());
+			e.printStackTrace();
+		}
+		finally{
+			if(sctpChannel != null){
+				try {
+					sctpChannel.close();
+				} catch (IOException e) {
+					System.out.println("In Client: Error while Closing Channel");
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+}
+
+/*
+Details:
+
+An SCTP channel can only control one SCTP association
+An SCTPChannel is created by invoking one of the open methods of this class. 
+A newly-created channel is open but not yet connected, that is, there is no association setup with a remote peer.
+An attempt to invoke an I/O operation upon an unconnected channel will cause a NotYetConnectedException to be thrown.
+Once connected, the channel remains connected until it is closed.     ##### IMPORTANT #####
+
+*/
