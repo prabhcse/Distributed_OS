@@ -1,0 +1,110 @@
+package all;
+
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.Random;
+import java.util.TreeMap;
+
+public class Project1 {
+
+	/**
+	 * @Author: Prabhmanmeet Singh
+	 */
+	public static void main(String[] args) {
+		//System.out.println("Node starting");
+		// Argument gives the index of this process to take from configuration file.
+		Integer index = Integer.parseInt(args[0]);
+		// To start from 0 un-comment below
+		//index = index + 1;
+		String attributes = new String();
+		int label = 0;
+		int exist = 0;
+		// Argument holds the machine name and its port to be used.
+		TreeMap<Integer, String> nodeValue = new TreeMap<Integer, String>();
+		StringBuffer build = new StringBuffer();
+		// Write the file handling code
+		//File file = new File("Configuration File.txt");
+		try {
+			//BufferedReader reader = new BufferedReader(new FileReader("D:\\AOS Codes\\Project_1\\src\\core\\Configuration File.txt"));
+			BufferedReader reader = new BufferedReader(new FileReader("/home/004/p/px/pxs134830/AOSpxs134830/all/Configuration File.txt"));
+			String line = null;
+			boolean nodeCount = true;
+			int nodes = 0;
+			//String[][] hostArray = new String[nodes][]; // Not needed, I am using TreeMap
+			int hostCount = 0;
+			try {
+				while((line = reader.readLine()) != null){
+					String[] buffer = line.split(" ");
+					// Skipping the # lines
+					if(buffer[0].equals("#") || line.isEmpty()){
+						continue;
+					}
+					else if(nodeCount){				// Assuming the number of nodes occur first 
+						nodeCount = false;
+						nodes = Integer.parseInt(buffer[0]);
+					}
+					else if(!nodeCount){
+						// Getting the hostname, port, path details
+						hostCount++;
+						String host = buffer[0];
+						String port = buffer[1];
+						//System.out.println("HOST: "+host+" , PORT: "+port);
+						nodeValue.put(hostCount,new String(host+"-"+port));
+						if(index == hostCount){
+							// Build my own path for token
+							build = new StringBuffer();
+							for(int i = 2; i < buffer.length; i++){
+								if(index == Integer.parseInt(buffer[i])){
+									exist++;								
+								}
+								build.append(" ").append(buffer[i]);
+							}
+							if(build.toString().isEmpty()){
+								build.append(" null");
+							}
+						}
+						else{
+							// For Termination Condition
+							for(int i = 2; i < buffer.length; i++){
+								// Count the number of times I am intermediate node
+								if(index == Integer.parseInt(buffer[i])){
+									exist++;								
+								}
+							}
+						}
+					}
+					
+				}
+				
+				attributes = String.valueOf(exist);
+				attributes = attributes.concat(build.toString());
+				//System.out.println("Attributes Project: "+attributes);
+				
+				//System.out.println("NodeValue map");
+				for(int i = 1; i <= hostCount; i++){
+					//System.out.println(i+" : "+nodeValue.get(i));
+				}
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		// Random generation of labels
+		Random r = new Random();
+		label = r.nextInt(300) + 1;
+		System.out.println("My Label: "+label+", My Index: "+index);
+		// Get the file and get your attributes.
+		
+		// Count your own instances for exist - Termination Logic.
+		Thread server = new Thread(new SocketThread(attributes, label, nodeValue, index),"Server-"+index);
+		server.start();
+		
+	}
+
+}
