@@ -1,0 +1,256 @@
+package all;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
+
+import com.sun.nio.sctp.MessageInfo;
+import com.sun.nio.sctp.SctpChannel;
+import com.sun.nio.sctp.SctpServerChannel;
+import com.sun.nio.sctp.SctpSocketOption;
+
+public class SCTPServer {
+
+	// Keeps a count of number of times this process is being used
+	private int exist = 0;
+	private static final int MESSAGE_SIZE = 200;
+	private int labelSum = 0;
+	
+	// Used to start the SCTP server
+	// label - my own label
+	// labelSum - my label sum that my token will return with
+	// tempLabelSum - the label sum of the token that goes through me
+	// index - which process number am I, given at run time
+	// attribute - exist, path
+	public void live(String attributes, int label, TreeMap<Integer, String> nodeValue, int index){
+		
+		//ThreadGroup clientThread = new ThreadGroup("Client");
+		Integer port = new Integer(0);
+		String path = null;
+		StringBuffer build = new StringBuffer();
+		SctpServerChannel serverChannel = null;
+		
+		// This index is provided at runtime with Process.
+		String node = String.valueOf(index);
+		boolean hasPath = false;
+		ByteBuffer byteBuffer = ByteBuffer.allocate(MESSAGE_SIZE);
+		
+		try{
+			if(attributes != null){
+				// Values from attributes, passed from Project1
+				String temp[] = attributes.split(" ");
+				exist  = Integer.parseInt(temp[0]);
+				if(temp[1].equals("null")){
+					path = null;
+				}
+				else{
+					path = new String();
+					for(int i = 1; i < temp.length; i++){
+						if(i == 1){
+							path = path.concat(temp[i]);
+						}
+						else{
+							path = path.concat(" "+temp[i]);
+						}
+					}
+					//System.out.println("Path:"+path);
+				}
+				// Values from attributes, passed from Project1
+			}
+			else{
+				//System.out.println("Attributes are Null");
+				System.exit(1);
+			}
+			// My port
+			port = Integer.parseInt(nodeValue.get(index).split("-")[1]);
+			// Open the server channel
+			serverChannel = SctpServerChannel.open();
+			
+			// Initiates the blocking mode, so that channel blocks itself till connection with remote server is made.
+//-->>		//serverChannel.configureBlocking(true);
+			// A newly created channel is always in blocking mode
+			
+			/*Set<SctpSocketOption<?>> options = serverChannel.supportedOptions();
+			System.out.println("The SCTP options from SCTPServer");
+			for( SctpSocketOption<?> it : options){
+				System.out.println(it.name());
+			}*/
+			
+			// socket address at given port
+			InetSocketAddress serverAddr = new InetSocketAddress(port.intValue());
+			// Binding the socket address with channel
+			serverChannel.bind(serverAddr);
+			
+			// Sleep operation to enable all servers are up
+			Thread.currentThread().sleep(20000);
+			
+			String[] hops = null;
+			// next hop's node value, gives the machine-port combo
+			String next = new String();
+			
+			build = new StringBuffer();
+			// If I have path, only then need to send out token.
+			if(path != null && !path.isEmpty())
+			{
+				hasPath = true;
+				hops = path.split(" ");
+				next = nodeValue.get(Integer.parseInt(hops[0]));
+				for(int  i = 0; i < hops.length; i++){
+					build.append(hops[i]).append(" F ");
+				}
+				build.append(node).append(" F");
+				path = build.toString();
+				// Adding the node itself, T - means node visited, F - means yet to visit
+				// path = path.concat(labelSum+" "+node+" T "+path+node+" F");
+				// removed the front addition of myself
+				build = new StringBuffer();
+				// Adding labelSum(token) to path
+				build.append(labelSum).append(" ").append(path);
+				path = build.toString();
+				
+				//System.out.println("Path Build:"+path+".");
+				
+				// Sending over my own path and token
+				// Start client thread and send over the data(labelSum + path).
+				// path check done, possible that this process does not have a path to send to.
+				//Thread client = new Thread(clientThread,new ClientThread(path, next),"Client");
+				Thread client = new Thread(new ClientThread(new String(next), new String(path), nodeValue),"Client");
+				client.start();
+			}	// end of if(path != null && !path.isEmpty())
+			
+			// Termination condition - remove true to terminate
+			// Case 1: I have path(hasPath = true) and I am present as intermediate node(exist != 0).
+			// Case 2: I don't have path(hasPath = false) but I am present as intermediate node(exist != 0).
+			// Case 3: I have path(hasPath = true) but I am not present as intermediate node(exist = 0).
+			// Case 4: I have neither path nor am I present as intermediate node. (Trivial, Useless node)(hasPath = false, exist = 0)
+			while(exist != 0 || hasPath ){
+				// Blocks till someone accesses this server, returns new SCTPChannel on success.
+				SctpChannel sctpCh = serverChannel.accept();
+				MessageInfo messageInfo = sctpCh.receive(byteBuffer, null, null);
+				//System.out.println("MessageInfo: "+messageInfo);
+				
+				String message = byteToString(byteBuffer, messageInfo.bytes());
+				
+				// Clearing to receive message
+				byteBuffer.clear();
+				
+				//System.out.println("Message recieved:"+message+"."+" Size: "+message.getBytes().length);
+				if(message.isEmpty() || message == null){
+					System.out.println("Server Received Empty Message.");
+					exist--;
+					continue;
+				}
+				// Label received from message
+				int tempLabelSum = 0;
+				// Path received from message
+				String tempPath = new String();
+				
+				String[] att = message.split(" ");
+				
+				// get the label sum computed till now from message token.
+				tempLabelSum = Integer.parseInt(att[0]);
+				//tempNode = att[1];
+				build = new StringBuffer();
+				//boolean flag = false;
+				
+				// Comment multiple, to skip adding label again for loop
+				//boolean multiple = false;
+				
+				// path building and check
+				for(int i = 1; i < att.length; i = i + 2){
+					if( att[i+1].equals("T") ){
+						// T - value means visited, skipping the visited nodes
+						// multiple - true: means this node is already visited before
+						/*if(att[i].equals(node)){
+							multiple = true;
+						}*/
+						build.append(att[i]).append(" ").append(att[i+1]).append(" ");
+						continue;
+					}
+					// When I am non visited node.
+					else if(att[i].equals(node) && att[i+1].equals("F"))
+					{
+						// Setting current process as visited in path.
+						att[i+1] = "T";
+						build.append(att[i]).append(" ").append(att[i+1]).append(" ");
+						
+						// if I am the last node, means I am the destination, this is my token.
+						if(i+1 == (att.length - 1) ){
+							System.out.println("My Label:"+label+", My Token:"+(labelSum = tempLabelSum)+", My Index:"+index);
+							hasPath = false;
+						}
+						// When I am not the destination and exist is non-zero, then decrement it
+						// I am added as Destination to my path
+						else if(exist != 0)
+						{
+							exist--;
+						}
+						// Intermediate node not intelligent
+						tempLabelSum = tempLabelSum + label;
+					}
+					// Get the next hop node
+					else if(!att[i].equals(node) && att[i+1].equals("F")){
+						// From nodeValue get the machine name and port no.
+						// Format we need to get - "dc11-3321"
+						next = nodeValue.get(Integer.parseInt(att[i]));
+						tempPath = String.valueOf(tempLabelSum);
+						while(i < att.length){
+							if( (i+1) == (att.length-1) ){
+								build.append(att[i]).append(" ").append(att[i+1]);
+							}
+							else{
+								build.append(att[i]).append(" ").append(att[i+1]).append(" ");
+							}
+							i = i + 2;
+						}
+						// adding label to the path
+						tempPath = tempPath.concat(" "+build.toString());
+						//System.out.println("Temp Path:"+tempPath+"."+" Temp Length: "+tempPath.getBytes().length);
+						// Check for multiple client thread invocations.
+						//Thread client = new Thread(clientThread,new ClientThread(next, tempPath),"Client");
+						Thread client = new Thread(new ClientThread(new String(next), new String(tempPath), nodeValue),"Client");
+						client.start();
+						break;
+					}
+				}
+				
+			}
+		}
+		catch(IOException e){
+			System.out.println("IO Exception - Node: "+e.getMessage());
+			e.printStackTrace();
+		}
+		catch(NumberFormatException e){
+			System.out.println("Number Format - Node:"+e.getMessage());
+			e.printStackTrace();
+		}
+		catch(InterruptedException e){
+			System.out.println("Interrupted Exception - Node:"+e.getMessage());
+			e.printStackTrace();
+		}
+		finally{
+			if(serverChannel != null){
+				try {
+					serverChannel.close();
+				} catch (IOException e) {
+					System.out.println("In Server: Error while Closing Channel");
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	// This is returning the whole Message Size, need to find the Message
+	public String byteToString(ByteBuffer byteBuffer, int length)
+	{
+		byteBuffer.position(0);
+		byteBuffer.limit(MESSAGE_SIZE);
+		// remaining() - Returns the number of elements between the current position and the limit.
+		byte[] bufArr = new byte[length];
+		byteBuffer.get(bufArr);
+		return new String(bufArr);
+	}
+}
