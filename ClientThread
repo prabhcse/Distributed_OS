@@ -1,0 +1,24 @@
+package all;
+
+import java.util.TreeMap;
+
+public class ClientThread  implements Runnable{
+
+	private SCTPClient clientObj;
+	String path = null;
+	String next = null;
+	private TreeMap<Integer,String> nodeValue;
+	
+	public ClientThread(String next, String path, TreeMap<Integer,String> nodeValue){
+		this.path = path;
+		this.next = next;
+		this.nodeValue = nodeValue;
+	}
+	
+	public void run() {
+		clientObj = new SCTPClient();
+		clientObj.live(next, path, nodeValue);
+	}
+
+	
+}
